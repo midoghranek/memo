@@ -171,3 +171,4 @@ app.post("/login", (req, res) => {
 });
 
 exports.api = functions.region("europe-west1").https.onRequest(app);
+// ddd
