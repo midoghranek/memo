@@ -44,7 +44,7 @@ exports.signup = (req, res) => {
         handle: newUser.handle,
         email: newUser.email,
         createdAt: new Date().toISOString(),
-        imgaeUrl: `https://firebasestorage.googleapis.com/v0/b/${
+        imageUrl: `https://firebasestorage.googleapis.com/v0/b/${
           config.storageBucket
         }/o/${noImg}?alt=media`,
         userId
@@ -59,7 +59,9 @@ exports.signup = (req, res) => {
       if (err.code === "auth/email-already-in-use") {
         return res.status(400).json({ email: "Email is already in use" });
       } else {
-        return res.status(500).json({ error: err.code });
+        return res
+          .status(500)
+          .json({ general: "Something went wrong, please try again" });
       }
     });
   return console.log("signup");
@@ -111,6 +113,44 @@ exports.addUserDetails = (req, res) => {
     });
 };
 
+// Get any user's details
+exports.getUserDetails = (req, res) => {
+  let userData = {};
+  db.doc(`/users/${req.params.handle}`)
+    .get()
+    .then(doc => {
+      if (doc.exists) {
+        userData.user = doc.data();
+        return db
+          .collection("memes")
+          .where("userHandle", "==", req.params.handle)
+          .orderBy("createdAt", "desc")
+          .get();
+      } else {
+        return res.status(404).json({ error: "User not found" });
+      }
+    })
+    .then(data => {
+      userData.memes = [];
+      data.forEach(doc => {
+        userData.memes.push({
+          body: doc.data().body,
+          createdAt: doc.data().createdAt,
+          userHandle: doc.data().userHandle,
+          userImage: doc.data().userImage,
+          likeCount: doc.data().likeCount,
+          CommentCount: doc.data().CommentCount,
+          memeId: doc.id
+        });
+      });
+      return res.json(userData);
+    })
+    .catch(err => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
+};
+
 // Get own user details
 exports.getAuthenticatedUser = (req, res) => {
   let userData = {};
@@ -120,7 +160,7 @@ exports.getAuthenticatedUser = (req, res) => {
       if (doc.exists) {
         userData.credentials = doc.data();
         return db
-          .collection("likes")
+          .collectionGroup("likes")
           .where("userHandle", "==", req.user.handle)
           .get();
       }
@@ -129,7 +169,30 @@ exports.getAuthenticatedUser = (req, res) => {
     .then(data => {
       userData.likes = [];
       data.forEach(doc => {
-        userData.likes.push(doc.data());
+        userData.likes.push({
+          memeId: doc.data().memeId
+        });
+      });
+      return db
+        .collection(`/users/${req.user.handle}/notifications`)
+        .orderBy("createdAt", "desc")
+        .limit(10)
+        .get();
+    })
+    .then(data => {
+      userData.notifications = [];
+      data.forEach(doc => {
+        userData.notifications.push({
+          createdAt: doc.data().createdAt,
+          recipient: doc.data().recipient,
+          sender: doc.data().sender,
+          read: doc.data().read,
+          memeId: doc.data().memeId,
+          type: doc.data().type,
+          commentBody: doc.data().commentBody,
+          senderImage: doc.data().senderImage,
+          notificationId: doc.id
+        });
       });
       return res.json(userData);
     })
@@ -192,4 +255,23 @@ exports.uploadImage = (req, res) => {
       });
   });
   busboy.end(req.rawBody);
+};
+
+exports.markNotificationsRead = (req, res) => {
+  let batch = db.batch();
+  req.body.forEach(notificationId => {
+    const notification = db.doc(
+      `/users/${req.user.handle}/notifications/${notificationId}`
+    );
+    batch.update(notification, { read: true });
+  });
+  batch
+    .commit()
+    .then(() => {
+      return res.json({ message: "Notifications marked read" });
+    })
+    .catch(err => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
 };

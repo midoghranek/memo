@@ -13,7 +13,7 @@ module.exports = (req, res, next) => {
     console.error("No token found");
     return res.status(403).json({ error: "Unauthorized" });
   }
-  admin
+  return admin
     .auth()
     .verifyIdToken(idToken)
     .then(decodedToken => {
@@ -26,11 +26,12 @@ module.exports = (req, res, next) => {
     })
     .then(data => {
       req.user.handle = data.docs[0].data().handle;
+      req.user.userId = data.docs[0].data().userId;
+      req.user.imageUrl = data.docs[0].data().imageUrl;
       return next();
     })
     .catch(err => {
       console.error("Error while verifying token ", err);
       return res.status(403).json(err);
     });
-  return console.log("Authorize meme creator");
 };
